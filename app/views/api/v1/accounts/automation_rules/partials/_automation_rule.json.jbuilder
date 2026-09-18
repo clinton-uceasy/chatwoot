@@ -9,4 +9,5 @@ json.created_on automation_rule.created_at.to_i
 json.active automation_rule.active?
 json.schedule_anchor automation_rule.schedule_anchor
 json.schedule_duration_minutes automation_rule.schedule_duration_minutes
+json.execution_delay automation_rule.execution_delay
 json.files automation_rule.file_base_data if automation_rule.files.any?

@@ -1,10 +1,9 @@
 <script setup>
 import { computed } from 'vue';
-import { useI18n } from 'vue-i18n';
-import { useMessageFormatter } from 'shared/composables/useMessageFormatter';
-import { useUISettings } from 'dashboard/composables/useUISettings';
+import { useSnakeCase } from 'dashboard/composables/useTransformKeys';
 
 import Avatar from 'dashboard/components-next/avatar/Avatar.vue';
+import MessagePreview from './MessagePreview.vue';
 
 const props = defineProps({
   conversation: {
@@ -13,26 +12,13 @@ const props = defineProps({
   },
 });
 
-const { t } = useI18n();
-const { uiSettings } = useUISettings();
-const { getPlainText } = useMessageFormatter();
+const lastNonActivityMessage = computed(() =>
+  useSnakeCase(props.conversation.lastNonActivityMessage ?? {}, { deep: true })
+);
 
-const lastNonActivityMessageContent = computed(() => {
-  const { lastNonActivityMessage = {}, additionalAttributes = {} } =
-    props.conversation;
-  const mailSubject = additionalAttributes?.mail_subject;
-  const messageContent =
-    lastNonActivityMessage?.content || t('CHAT_LIST.NO_CONTENT');
-  const previewMode = uiSettings.value.conversation_list_preview || 'message';
-
-  if (mailSubject) {
-    if (previewMode === 'subject') return getPlainText(mailSubject);
-    if (previewMode === 'both')
-      return getPlainText(`${mailSubject} — ${messageContent}`);
-  }
-
-  return getPlainText(messageContent);
-});
+const mailSubject = computed(
+  () => props.conversation.additionalAttributes?.mail_subject
+);
 
 const assignee = computed(() => {
   const { meta: { assignee: agent = {} } = {} } = props.conversation;
@@ -51,9 +37,13 @@ const unreadMessagesCount = computed(() => {
 
 <template>
   <div class="flex items-end w-full gap-2 pb-1">
-    <p class="w-full mb-0 text-sm leading-7 text-n-slate-12 line-clamp-2">
-      {{ lastNonActivityMessageContent }}
-    </p>
+    <MessagePreview
+      :message="lastNonActivityMessage"
+      :mail-subject="mailSubject"
+      multi-line
+      class="w-full"
+      :class="unreadMessagesCount > 0 ? 'text-n-slate-12' : 'text-n-slate-11'"
+    />
     <div class="flex items-center flex-shrink-0 gap-2 pb-2">
       <Avatar
         v-if="assignee.name"
