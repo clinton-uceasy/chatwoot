@@ -62,9 +62,6 @@ const onMergeClick = conversation => {
   showMergeModal.value = true;
 };
 
-const getDisplayId = conversation =>
-  conversation.display_id || conversation.displayId || conversation.id;
-
 const onMergeClose = () => {
   showMergeModal.value = false;
   mergeTargetConversation.value = null;
