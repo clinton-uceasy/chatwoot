@@ -3,6 +3,11 @@ module Concerns::Agentable
 
   DEFAULT_TEMPERATURE = 0.5
 
+  # OpenAI reasoning models on Bedrock (via the OpenAI-compatible endpoint) reject
+  # function tools on /v1/chat/completions unless reasoning_effort is explicitly
+  # set. Captain relies on tool calling (faq_lookup, handoff), so pin it to 'none'.
+  DEFAULT_PROVIDER_PARAMS = { reasoning_effort: 'none' }.freeze
+
   def agent(runtime_configuration: nil, runtime_agent_name: nil)
     Agents::Agent.new(
       name: runtime_agent_name || agent_name,
@@ -10,7 +15,8 @@ module Concerns::Agentable
       tools: agent_tools,
       model: agent_model,
       temperature: temperature.presence&.to_f || DEFAULT_TEMPERATURE,
-      response_schema: agent_response_schema
+      response_schema: agent_response_schema,
+      params: DEFAULT_PROVIDER_PARAMS
     )
   end
 
