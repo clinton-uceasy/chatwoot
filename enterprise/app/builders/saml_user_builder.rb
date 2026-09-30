@@ -19,7 +19,10 @@ class SamlUserBuilder
     user = User.from_email(auth_attribute('email'))
 
     return create_user unless user
-    return existing_user_for_account(user) if user_belongs_to_account?(user) && !user_has_additional_accounts?(user)
+    # NOTE: uceasy — do NOT re-add the `&& !user_has_additional_accounts?` guard from
+    # upstream #15395. It regresses SSO login for users assigned to multiple accounts
+    # (they fall through to AuthenticationFailed). Keep the pre-#15395 behavior.
+    return existing_user_for_account(user) if user_belongs_to_account?(user)
 
     raise AuthenticationFailed, I18n.t('auth.saml.authentication_failed')
   end
@@ -32,10 +35,6 @@ class SamlUserBuilder
 
   def user_belongs_to_account?(user)
     user.account_users.exists?(account_id: @account_id)
-  end
-
-  def user_has_additional_accounts?(user)
-    user.account_users.where.not(account_id: @account_id).exists?
   end
 
   def confirm_user_if_required(user)
