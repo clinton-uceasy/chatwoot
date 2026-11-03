@@ -10,4 +10,9 @@ json.active automation_rule.active?
 json.schedule_anchor automation_rule.schedule_anchor
 json.schedule_duration_minutes automation_rule.schedule_duration_minutes
 json.execution_delay automation_rule.execution_delay
+if ChatwootApp.enterprise?
+  json.monitor_id automation_rule.monitor_id
+  json.monitor_name automation_rule.monitor&.name
+  json.monitor_availability automation_rule.monitor_availability
+end
 json.files automation_rule.file_base_data if automation_rule.files.any?

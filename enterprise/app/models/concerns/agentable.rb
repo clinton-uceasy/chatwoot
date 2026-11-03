@@ -3,14 +3,25 @@ module Concerns::Agentable
 
   DEFAULT_TEMPERATURE = 0.5
 
+  # OpenAI reasoning models on Bedrock (via the OpenAI-compatible endpoint) reject
+  # function tools on /v1/chat/completions unless reasoning_effort is explicitly
+  # set. Captain relies on tool calling (faq_lookup, handoff), so pin it to 'none'.
+  DEFAULT_PROVIDER_PARAMS = { reasoning_effort: 'none' }.freeze
+
   def agent(runtime_configuration: nil, runtime_agent_name: nil)
+    model = agent_model
+    options = Captain::ResponsesConfig.options(model: model, temperature: temperature.presence&.to_f || DEFAULT_TEMPERATURE)
+    # Bedrock's OpenAI-compatible endpoint is not the standard OpenAI endpoint, so
+    # ResponsesConfig.options emits no reasoning config there. Pin reasoning_effort
+    # explicitly via provider params so tool calls are accepted (see DEFAULT_PROVIDER_PARAMS).
+    options[:params] = DEFAULT_PROVIDER_PARAMS unless Llm::FeatureRouter.standard_openai_endpoint?
     Agents::Agent.new(
       name: runtime_agent_name || agent_name,
       instructions: ->(context) { agent_instructions(context, runtime_configuration: runtime_configuration) },
       tools: agent_tools,
-      model: agent_model,
-      temperature: temperature.presence&.to_f || DEFAULT_TEMPERATURE,
-      response_schema: agent_response_schema
+      model: model,
+      response_schema: agent_response_schema,
+      **options
     )
   end
 
@@ -24,6 +35,8 @@ module Concerns::Agentable
         current_time: format_current_time(state[:timezone]),
         conversation: state[:conversation] || {},
         contact: config['feature_contact_attributes'].present? ? state[:contact] : nil,
+        can_verify_email: state[:can_verify_email],
+        verified_email: state[:verified_email],
         campaign: state[:campaign] || {},
         message_length_limit: state[:message_length_limit]
       )
@@ -34,7 +47,7 @@ module Concerns::Agentable
 
   def agent_model
     route = Llm::FeatureRouter.resolve(feature: 'assistant', account: account)
-    return route[:model] if route[:source] == :account_override || account&.feature_enabled?('captain_integration_v2')
+    return route[:model] if route[:source] == :account_override || account&.feature_enabled?('captain_integration')
 
     installation_model.presence || route[:model]
   end

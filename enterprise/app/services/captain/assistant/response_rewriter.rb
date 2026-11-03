@@ -63,12 +63,17 @@ class Captain::Assistant::ResponseRewriter
 
   def runner
     @runner ||= begin
+      model = @assistant.agent_model
+      options = Captain::ResponsesConfig.options(model: model, temperature: 0)
+      # See Concerns::Agentable#agent: pin reasoning_effort on non-standard (Bedrock) endpoints
+      # so the OpenAI-compatible endpoint accepts the structured response request.
+      options[:params] = Concerns::Agentable::DEFAULT_PROVIDER_PARAMS unless Llm::FeatureRouter.standard_openai_endpoint?
       agent = Agents::Agent.new(
         name: AGENT_NAME,
         instructions: INSTRUCTIONS,
-        model: @assistant.agent_model,
-        temperature: 0,
-        response_schema: Captain::ResponseSchema
+        model: model,
+        response_schema: Captain::ResponseSchema,
+        **options
       )
       Agents::Runner.with_agents(agent).tap { |runner| install_instrumentation(runner) }
     end
