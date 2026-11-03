@@ -4,7 +4,9 @@ import ConversationsAPI from '../../../api/conversations';
 import MessageApi from '../../../api/inbox/message';
 import { MESSAGE_STATUS, MESSAGE_TYPE } from 'shared/constants/messages';
 import { createPendingMessage } from 'dashboard/helper/commons';
-import filterQueryGenerator from 'dashboard/helper/filterQueryGenerator';
+import filterQueryGenerator, {
+  withTimestampTimezone,
+} from 'dashboard/helper/filterQueryGenerator';
 import {
   buildConversationList,
   isOnMentionsView,
@@ -168,7 +170,7 @@ const actions = {
     commit(types.CLEAR_CURRENT_CHAT_WINDOW);
   },
 
-  fetchPreviousMessages: ({ commit }, data) => {
+  fetchPreviousMessages: ({ commit, dispatch }, data) => {
     const requestKey = JSON.stringify([
       MessageApi.url,
       data.conversationId,
@@ -189,6 +191,7 @@ const actions = {
           id: data.conversationId,
           data: payload,
         });
+        dispatch('autoTranslateMessages', data.conversationId);
         // A short backward page means the start is reached; `after` requests only prove it when empty.
         const hasReachedFirstMessage = data.after
           ? !payload.length
@@ -265,6 +268,7 @@ const actions = {
         conversationId,
         messageId: null,
       });
+      dispatch('autoTranslateMessages', conversationId);
       dispatch('markMessagesRead', { id: conversationId }, { root: true });
     } catch (error) {
       // Handle error
@@ -428,13 +432,23 @@ const actions = {
     }
   },
 
+  getContactInfoRequestAvailability: async (_, { conversationId, signal }) => {
+    const { data } = await ConversationApi.getContactInfoRequestAvailability(
+      conversationId,
+      {
+        signal,
+      }
+    );
+    return data;
+  },
+
   requestContactInfo: async ({ commit }, conversationId) => {
     const { data } = await ConversationApi.requestContactInfo(conversationId);
     commit(types.ADD_MESSAGE, data);
     return data;
   },
 
-  addMessage({ commit, rootGetters }, message) {
+  addMessage({ commit, dispatch, rootGetters }, message) {
     commit(types.ADD_MESSAGE, message);
     if (message.message_type === MESSAGE_TYPE.INCOMING) {
       commit(types.SET_CONVERSATION_CAN_REPLY, {
@@ -442,11 +456,12 @@ const actions = {
         canReply: true,
       });
       commit(types.ADD_CONVERSATION_ATTACHMENTS, message);
+      dispatch('autoTranslateMessages', message.conversation_id);
     }
     handleVoiceCallCreated(
       message,
       rootGetters?.getCurrentUserID,
-      rootGetters?.getCurrentUserAvailability
+      rootGetters?.getCurrentUserReceivesCalls
     );
   },
 
@@ -473,7 +488,7 @@ const actions = {
       commit,
       message,
       rootGetters?.getCurrentUserID,
-      rootGetters?.getCurrentUserAvailability
+      rootGetters?.getCurrentUserReceivesCalls
     );
   },
 
@@ -539,6 +554,8 @@ const actions = {
 
     commit(types.UPDATE_CONVERSATION, conversation);
     syncConversationCallVisibility(conversation, rootGetters?.getCurrentUserID);
+    // The contact language can change after a message arrived; the action skips anything already handled.
+    dispatch('autoTranslateMessages', conversation.id);
 
     dispatch('conversationLabels/setConversationLabel', {
       id: conversation.id,
@@ -631,13 +648,14 @@ const actions = {
     { commit, dispatch },
     { filters, sortBy = null }
   ) => {
-    commit(types.SET_CONVERSATION_FILTERS, filters);
+    const appliedFilters = filters.map(withTimestampTimezone);
+    commit(types.SET_CONVERSATION_FILTERS, appliedFilters);
     commit(types.SET_CONVERSATION_FILTERS_SORT, sortBy);
     commit(types.EMPTY_ALL_CONVERSATION);
     dispatch('conversationPage/reset', {}, { root: true });
 
     return dispatch('fetchFilteredConversations', {
-      queryData: filterQueryGenerator(filters),
+      queryData: filterQueryGenerator(appliedFilters),
       page: 1,
     });
   },

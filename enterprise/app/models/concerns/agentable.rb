@@ -9,14 +9,19 @@ module Concerns::Agentable
   DEFAULT_PROVIDER_PARAMS = { reasoning_effort: 'none' }.freeze
 
   def agent(runtime_configuration: nil, runtime_agent_name: nil)
+    model = agent_model
+    options = Captain::ResponsesConfig.options(model: model, temperature: temperature.presence&.to_f || DEFAULT_TEMPERATURE)
+    # Bedrock's OpenAI-compatible endpoint is not the standard OpenAI endpoint, so
+    # ResponsesConfig.options emits no reasoning config there. Pin reasoning_effort
+    # explicitly via provider params so tool calls are accepted (see DEFAULT_PROVIDER_PARAMS).
+    options[:params] = DEFAULT_PROVIDER_PARAMS unless Llm::FeatureRouter.standard_openai_endpoint?
     Agents::Agent.new(
       name: runtime_agent_name || agent_name,
       instructions: ->(context) { agent_instructions(context, runtime_configuration: runtime_configuration) },
       tools: agent_tools,
-      model: agent_model,
-      temperature: temperature.presence&.to_f || DEFAULT_TEMPERATURE,
+      model: model,
       response_schema: agent_response_schema,
-      params: DEFAULT_PROVIDER_PARAMS
+      **options
     )
   end
 
@@ -30,6 +35,8 @@ module Concerns::Agentable
         current_time: format_current_time(state[:timezone]),
         conversation: state[:conversation] || {},
         contact: config['feature_contact_attributes'].present? ? state[:contact] : nil,
+        can_verify_email: state[:can_verify_email],
+        verified_email: state[:verified_email],
         campaign: state[:campaign] || {},
         message_length_limit: state[:message_length_limit]
       )
@@ -40,7 +47,7 @@ module Concerns::Agentable
 
   def agent_model
     route = Llm::FeatureRouter.resolve(feature: 'assistant', account: account)
-    return route[:model] if route[:source] == :account_override || account&.feature_enabled?('captain_integration_v2')
+    return route[:model] if route[:source] == :account_override || account&.feature_enabled?('captain_integration')
 
     installation_model.presence || route[:model]
   end
